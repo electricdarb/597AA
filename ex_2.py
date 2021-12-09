@@ -32,13 +32,31 @@ radio_max = 500
 # each request requires 50 Mbps for radio access, 2 CPUs for computing and 2 GB pf storage resources
 request_resources = np.array([50, 2, 2]) # Mbps, CPUs, Gb
 
-def check_next_state(arr_class_rew, rew, res_used, max_res):
-    accept = True
+def greedy(arr_class_rew, rew, res_used, max_res):
     new_res = res_used + request_resources
     if (new_res<=max_res).all():
         res_used = new_res
         rew += arr_class_rew
+        # if (new_res<=max_res-4*request_resources).all():
+        #     if arr_class_rew == 4: # if resoruces are too high, wait for class-3
+        #         res_used = new_res
+        #         rew += arr_class_rew
+        # else:
+    return rew, res_used
 
+def other(arr_class_rew, rew, res_used, max_res):
+    new_res = res_used + request_resources
+    if (new_res<=max_res).all():
+        if (new_res<=max_res-request_resources).all():
+            if arr_class_rew == 4: # if resoruces are too high, wait for class-3
+                res_used = new_res
+                rew += arr_class_rew
+        else:
+            res_used = new_res
+            rew += arr_class_rew
+    # else:
+    #     if arr_class_rew == 4:
+    #         print("Worst case!!")
     return rew, res_used
 
 def completion(res_used):
@@ -49,7 +67,7 @@ def completion(res_used):
 resources_small = np.array([400, 8, 4]) # Mbps, CPUs, Gb
 
 fog_nodes = range(1,10)
-
+algorithm = other
 for num_nodes in fog_nodes:
     resources_used = np.array([0, 0, 0])
     max_resources = num_nodes*resources_small
@@ -58,11 +76,11 @@ for num_nodes in fog_nodes:
     num_hours = 5
     for i in range(num_hours*120):
         if i%10==9:
-            reward, resources_used = check_next_state(1, reward, resources_used, max_resources)
+            reward, resources_used = algorithm(1, reward, resources_used, max_resources)
         if i%15==14:
-            reward, resources_used = check_next_state(2, reward, resources_used, max_resources)
+            reward, resources_used = algorithm(2, reward, resources_used, max_resources)
         if i%12==11:
-            reward, resources_used = check_next_state(4, reward, resources_used, max_resources)
+            reward, resources_used = algorithm(4, reward, resources_used, max_resources)
         if i%40==39:
             resources_used = completion(resources_used)
 
