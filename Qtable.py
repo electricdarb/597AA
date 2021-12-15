@@ -85,6 +85,7 @@ if __name__ == "__main__":
     rewards = np.array([1, 2, 4])
 
     reward_avg = 0
+    class_rewards = ([], [], [])
 
     for t in range(timesteps):
         # request events will happen at random with a uniform prob of lambd[c]
@@ -103,6 +104,7 @@ if __name__ == "__main__":
 
                 Q.update_table(state, action, reward, class_num, s_prime, alpha, gamma)
                 state = s_prime # set new state
+
                 reward_avg = reward_avg * .98 + .02 * reward
 
                 # decrease epsilon to become less greedy
@@ -116,5 +118,6 @@ if __name__ == "__main__":
             else:
                 i+=1 
 
-        print(reward_avg)
+        if t%100 == 0:
+            print(reward_avg)
         
