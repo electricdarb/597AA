@@ -43,7 +43,7 @@ class Qtable():
 def next_state(state, slice_, action):
     if action == 1: # if resource is being taken
         pass
-    elif action == -1: # if resource is being releases
+    elif action == -1: # if resource is being releases TODO: isn't it action = [0, 1] not [-1, 1]
         pass
 
 if __name__ == "__main__":
