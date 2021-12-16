@@ -7,19 +7,20 @@ class Qtable():
         """
         num_classes: int, number of classes in the model
         num_resources: int, maximum amount of resources that can be assigned for a given class
-    
         request space: [[0, 1] for i in range(num_classes)]
+
+        defines self.table: a table of shape [resource1, ... resouce2, class_slice, num_actions]
         """
         self.blocks_per_resource = blocks_per_resource
         self.max_resources = max_resources
         self.actions = actions # accept or deny request 
         num_actions = len(self.actions)
-        # Q table, initialized to 0. 
         self.table = np.zeros((*blocks_per_resource, num_classes, num_actions)) 
        
     def update_table(self, s, a, reward, class_num, s_prime, gamma, alpha):
         index_s = self.map_s(s)
         index_s_prime = self.map_s(s_prime)
+        # update table using bellman equation 
         self.table[(*index_s, class_num, a)] = self.table[(*index_s, class_num, a)] \
             + alpha * (reward + gamma * \
             np.max(self.table[(*index_s_prime, class_num)]) -  self.table[(*index_s, class_num, a)])
@@ -36,8 +37,8 @@ if __name__ == "__main__":
     num_resources = 3 # there are three resources: radio, storage, and compute 
 
     gamma = .9
-    epsilon = .7
-    alpha = .3
+    epsilon = 1
+    alpha = .05
 
     max_comp = 500
     max_storage = 1e6
@@ -62,9 +63,9 @@ if __name__ == "__main__":
                 break
 
         if over_limit:
-            return 0, 0
+            return 0, False
         else:
-            return delta_state, 1
+            return delta_state, True
 
     # init table with 3 classes and 3 resources
     Q = Qtable(max_resources, [5, 5, 5])
@@ -72,43 +73,39 @@ if __name__ == "__main__":
     # init events, each event is shape (num_classes, 3)
     delta_t = 1/40  # 40 steps per hour
     
-    lambd = [12*delta_t, 8*delta_t, 10*delta_t] # probabilites that an event happens in a time step
-    # since delta 
-    beta  = 1/(3*delta_t)
+    lambd = [12 * delta_t, 8 * delta_t, 10 * delta_t] # probabilites that an event happens in a time step
+    beta  = 1 / (3 * delta_t) # define beta for expoential decrease 
     
-    timesteps = 10000
-    active_resources = []
-    droptimes = []
+    timesteps = 1000000 # total timesteps to take
+    active_resources = [] 
+    droptimes = [] 
 
-
-    state = np.array([0, 0, 0]) #init state to 0
+    state = np.array([0, 0, 0]) # init state to 0
     rewards = np.array([1, 2, 4])
 
     reward_avg = 0
     class_rewards = ([], [], [])
 
     for t in range(timesteps):
+        reward = 0
         # request events will happen at random with a uniform prob of lambd[c]
         for class_num, prob in enumerate(lambd): # iterate through classes
             if random.random() < prob: # if there is a request
                 # Q learning s
                 action = Q.best_action(state, class_num) if random.random() > epsilon else random.choice(actions)
-                delta_state, action = take_action(state) if action else (0, 0) # Bradford Gill II
+                delta_state, taken = take_action(state) if action else (0, 0) 
                 s_prime = state + delta_state # Take Action
-                reward = 0
-                # state matiance
-                if action:
+                reward = 0 # set default reward to 0
+                if taken:
                     droptimes.append(t + np.random.exponential(beta)) # calculate droptime of resources allocated
                     active_resources.append(delta_state)
+                    ###### Write rewards here, could be a function that takes in class_num and weather it is a fog node or not
                     reward = rewards[class_num]
 
                 Q.update_table(state, action, reward, class_num, s_prime, alpha, gamma)
-                state = s_prime # set new state
+                state = s_prime # set new stat
+                reward_avg = reward_avg * .99 + .01 * reward
 
-                reward_avg = reward_avg * .98 + .02 * reward
-
-                # decrease epsilon to become less greedy
-                epsilon *= .99
         i = 0 
         while i < len(active_resources):
             if t > droptimes[i]: # same as delta = 3
@@ -116,8 +113,11 @@ if __name__ == "__main__":
                 droptimes.pop(i) 
                 active_resources.pop(i)
             else:
-                i+=1 
-
-        if t%100 == 0:
+                i += 1 
+        
+        if t % 1000 == 0:
             print(reward_avg)
+            epsilon *= .998
+
+
         
