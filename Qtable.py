@@ -1,83 +1,123 @@
-import tensorflow as tf
 import random 
+import numpy as np
+from math import floor
 
 class Qtable():
-    def __init__(self, num_classes: int, num_resources: int, actions: list = [0, 1]):
+    def __init__(self, max_resources, blocks_per_resource, num_classes = 3, actions: list = [0, 1]):
         """
         num_classes: int, number of classes in the model
         num_resources: int, maximum amount of resources that can be assigned for a given class
-        """
-        """
         request space: [[0, 1] for i in range(num_classes)]
+
+        defines self.table: a table of shape [resource1, ... resouce2, class_slice, num_actions]
         """
-        self.actions = actions # accept or deny request
+        self.blocks_per_resource = blocks_per_resource
+        self.max_resources = max_resources
+        self.actions = actions # accept or deny request 
         num_actions = len(self.actions)
-        # Q table, initialized to 0. 
-        self.table = tf.zeros((num_classes, num_resources, num_actions)) # shape num_classes* num_resources
+        self.table = np.zeros((*blocks_per_resource, num_classes, num_actions)) 
        
-    def update_table(self, s: list, a: int, gamma, alpha):
+    def update_table(self, s, a, reward, class_num, s_prime, gamma, alpha):
         index_s = self.map_s(s)
-        index_a = a 
-        s_prime = self.next_state(s, a)
         index_s_prime = self.map_s(s_prime)
-        
-        self.table[index_s, index_a] = self.table[index_s, index_a] + alpha * (self.reward(s, a)
-            + gamma * tf.math.reduce_max(self.table[index_s_prime, :]) - self.table[index_s, index_a])
+        # update table using bellman equation 
+        self.table[(*index_s, class_num, a)] = self.table[(*index_s, class_num, a)] \
+            + alpha * (reward + gamma * \
+            np.max(self.table[(*index_s_prime, class_num)]) -  self.table[(*index_s, class_num, a)])
 
     def best_action(self, state, slice_):
-        return tf.argmax(self.table[state, :])
+        index_s = self.map_s(state)
+        return np.argmax(self.table[(*index_s, slice_)])
 
-    @staticmethod
-    def map_s(s):
-        pass
-    
-    @staticmethod
-    def map_a(a):
-        pass
-    
-    @staticmethod
-    def reward(s, a):
-        pass
-
-
-def next_state(state, slice_, action):
-    if action == 1: # if resource is being taken
-        pass
-    elif action == -1: # if resource is being releases TODO: isn't it action = [0, 1] not [-1, 1]
-        pass
+    def map_s(self, state):
+        return [floor(s / m * b) for s, m, b in zip(state, self.max_resources, self.blocks_per_resource)]
 
 if __name__ == "__main__":
-
-    num_events  = 1e6 # define the number of iterations/events
     num_classes = 3 # there are three classes: utilities, automotive, and manufactuting 
     num_resources = 3 # there are three resources: radio, storage, and compute 
 
-    gamma = 1
+    gamma = .9
     epsilon = 1
-    alpha = 1
+    alpha = .05
+
+    max_comp = 500
+    max_storage = 1e6
+    max_radio = 1e6
+
+    max_resources = np.array([max_comp, max_radio, max_storage])
+
+    delta_comp = 2 #cpus
+    delta_storage = 1 #gb
+    delta_radio = 100 # mbps
 
     # action space
     actions = [0, 1]
 
-    # init table with 3 classes and 3 resources
-    Q = Qtable(num_classes, num_resources, actions)
+    def take_action(state): # take action and prevent any invalid state from happened 
+        delta_state = np.array([delta_comp, delta_radio, delta_storage])
+        state_prime = state + delta_state
+        over_limit = False
+        for i in range(len(state_prime)):
+            if state_prime[i] > max_resources[i]:
+                over_limit = True
+                break
 
-    # init state
-    state = None
+        if over_limit:
+            return 0, False
+        else:
+            return delta_state, True
+
+    # init table with 3 classes and 3 resources
+    Q = Qtable(max_resources, [5, 5, 5])
 
     # init events, each event is shape (num_classes, 3)
-    events = tf.zeros((num_events, 3)) # there is a more effiecent way of doing this, space wise but this is what the paper does
-    delta_t = 
-    for i in range(num_events):
-        pass # loop over and define each event 
+    delta_t = 1/40  # 40 steps per hour
+    
+    lambd = [12 * delta_t, 8 * delta_t, 10 * delta_t] # probabilites that an event happens in a time step
+    beta  = 1 / (3 * delta_t) # define beta for expoential decrease 
+    
+    timesteps = 1000000 # total timesteps to take
+    active_resources = [] 
+    droptimes = [] 
 
-    for event in events:
-        for slice_, request in enumerate(event):
-            if request  == 1: # if a request is being made 
-                action = Q.best_action(state, slice_) if random.random() > epsilon else random.choice(actions)
-                Q.update_table(state, slice_, action)
-                state = next_state(state, slice_, 1) if action else state # take action if action 
-                break # break bc paper says each event can only correspond to one class
-            elif request == -1: # if a release is being made
-                state = next_state(state, slice_, -1) # release resource 
-                break # break bc paper says each event can only correspond to one class
+    state = np.array([0, 0, 0]) # init state to 0
+    rewards = np.array([1, 2, 4])
+
+    reward_avg = 0
+    class_rewards = ([], [], [])
+
+    for t in range(timesteps):
+        reward = 0
+        # request events will happen at random with a uniform prob of lambd[c]
+        for class_num, prob in enumerate(lambd): # iterate through classes
+            if random.random() < prob: # if there is a request
+                # Q learning s
+                action = Q.best_action(state, class_num) if random.random() > epsilon else random.choice(actions)
+                delta_state, taken = take_action(state) if action else (0, 0) 
+                s_prime = state + delta_state # Take Action
+                reward = 0 # set default reward to 0
+                if taken:
+                    droptimes.append(t + np.random.exponential(beta)) # calculate droptime of resources allocated
+                    active_resources.append(delta_state)
+                    ###### Write rewards here, could be a function that takes in class_num and weather it is a fog node or not
+                    reward = rewards[class_num]
+
+                Q.update_table(state, action, reward, class_num, s_prime, alpha, gamma)
+                state = s_prime # set new stat
+                reward_avg = reward_avg * .99 + .01 * reward
+
+        i = 0 
+        while i < len(active_resources):
+            if t > droptimes[i]: # same as delta = 3
+                state -= active_resources[i] # remove active resoueces from state
+                droptimes.pop(i) 
+                active_resources.pop(i)
+            else:
+                i += 1 
+        
+        if t % 1000 == 0:
+            print(reward_avg)
+            epsilon *= .998
+
+
+        
