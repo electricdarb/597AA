@@ -30,19 +30,19 @@ class Qtable():
         return np.argmax(self.table[(*index_s, slice_)])
 
     def map_s(self, state):
-        return [floor(s / m * b) for s, m, b in zip(state, self.max_resources, self.blocks_per_resource)]
+        return [min(floor(s / m * b), b-1) for s, m, b in zip(state, self.max_resources, self.blocks_per_resource)]
 
 if __name__ == "__main__":
     num_classes = 3 # there are three classes: utilities, automotive, and manufactuting 
     num_resources = 3 # there are three resources: radio, storage, and compute 
 
-    gamma = .9
+    gamma = .97
     epsilon = 1
-    alpha = .05
+    alpha = .3
 
-    max_comp = 500
-    max_storage = 1e6
-    max_radio = 1e6
+    max_comp = 10
+    max_storage = 5
+    max_radio = 500
 
     max_resources = np.array([max_comp, max_radio, max_storage])
 
@@ -54,7 +54,8 @@ if __name__ == "__main__":
     actions = [0, 1]
 
     def take_action(state): # take action and prevent any invalid state from happened 
-        delta_state = np.array([delta_comp, delta_radio, delta_storage])
+        #delta_state = np.array([delta_comp, delta_radio, delta_storage])
+        delta_state = np.array([random.uniform(l, h) for l, h in [(1, 3), (50, 200), (.5, 1.5)]])
         state_prime = state + delta_state
         over_limit = False
         for i in range(len(state_prime)):
@@ -76,11 +77,12 @@ if __name__ == "__main__":
     lambd = [12 * delta_t, 8 * delta_t, 10 * delta_t] # probabilites that an event happens in a time step
     beta  = 1 / (3 * delta_t) # define beta for expoential decrease 
     
-    timesteps = 1000000 # total timesteps to take
+    timesteps = int(1e6) # total timesteps to take
     active_resources = [] 
     droptimes = [] 
 
-    state = np.array([0, 0, 0]) # init state to 0
+    state = np.array([0, 0, 0]) # init state to 0 for all resources
+
     rewards = np.array([1, 2, 4])
 
     reward_avg = 0
@@ -104,7 +106,7 @@ if __name__ == "__main__":
 
                 Q.update_table(state, action, reward, class_num, s_prime, alpha, gamma)
                 state = s_prime # set new stat
-                reward_avg = reward_avg * .99 + .01 * reward
+                reward_avg = reward_avg * .999 + .001 * reward
 
         i = 0 
         while i < len(active_resources):
@@ -116,7 +118,7 @@ if __name__ == "__main__":
                 i += 1 
         
         if t % 1000 == 0:
-            print(reward_avg)
+            print(reward_avg, ' ', epsilon)
             epsilon *= .998
 
 
