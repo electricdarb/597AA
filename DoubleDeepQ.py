@@ -92,6 +92,8 @@ if __name__ == "__main__":
     actions = [0, 1] # action space 
 
     rewards = np.array([1, 2, 4])
+    costs = np.array([.6, .4, .5])
+
     state = np.zeros((1, num_resources)) # init state to 0 for all resources
 
     def take_action(state, num_class): # take action and prevent any invalid state from happened 
@@ -151,13 +153,13 @@ if __name__ == "__main__":
                             taken = False
                             s_prime = state # set s prime to state since it wont be changing 
                             break
-                reward = 0 # set default reward to 0
+                net_reward = 0 # set default reward to 0
                 if taken:
                     droptimes.append(t + np.random.exponential(beta)) # calculate droptime of resources allocated
                     active_resources.append(delta_state)
                     ###### Write rewards here, could be a function that takes in class_num and weather it is a fog node or not
-                    reward = rewards[class_num]
-                buffer.append([state, action, reward, class_num, s_prime])
+                    net_reward = rewards[class_num] - costs[class_num] 
+                buffer.append([state, action, net_reward, class_num, s_prime])
                 state = s_prime # set new stat
                 reward_avg = reward_avg * .999 + .001 * reward
 
@@ -169,7 +171,6 @@ if __name__ == "__main__":
                 if len(buffer) >=  batch_size:
                     batch = np.random.permutation(buffer.list)[:batch_size]
                     train(batch)
-
         i = 0 
         while i < len(active_resources):
             if t > droptimes[i]: # same as delta = 3
