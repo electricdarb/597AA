@@ -1,9 +1,6 @@
 import random 
 import numpy as np
 import tensorflow as tf
-from math import floor
-
-from tensorflow.python.ops.gen_array_ops import one_hot
 
 class DoubleDeep(tf.keras.Model):
     def __init__(self, max_resources, num_classes = 3):
@@ -178,10 +175,9 @@ if __name__ == "__main__":
             if t > droptimes[i]: # same as delta = 3
                 state -= active_resources[i] # remove active resoueces from state
                 droptimes.pop(i) 
-                active_resources.pop(i)
+                active_resources.pop(i) 
             else:
                 i += 1 
         
         if t % 1000 == 0:
             print(reward_avg, ' ', epsilon)
-            #epsilon *= .9975
