@@ -23,22 +23,20 @@ class DoubleDeep(tf.keras.Model):
 class Qtable():
     def __init__(self, max_resources,
          num_classes = 3, 
-         buffer_size = 4, 
          loss = tf.keras.losses.huber,
          opt = tf.keras.optimizers.SGD(),
          gamma = .97):
         """
         args:
             max_resources: list with each cell specifying resource capacity of each resourse
-            blocks_per_resource: how many blocks to break resources up into, make resources discrete
             num_classes: number or classes or slices 
-            actions: list of possible actions 
+            loss: keras loss function
+            opt: keras optimizer
+            gamma: value to consider the future at 
         self.table:  a q table that has an element for every reource, class, action combination
         """
         self.max_resources = max_resources
         self.Q_t = self.Q = DoubleDeep(max_resources, num_classes) # define target and regular q table
-        num_resources = len(max_resources)
-        self.buffer = tf.zeros((buffer_size, num_resources, 1, 1, num_resources))
         self.loss = loss
         self.opt = opt
         self.gamma = gamma
@@ -54,7 +52,7 @@ class Qtable():
         grads = tape.gradient(loss, self.Q.trainable_variables)
         self.opt.apply_gradients(zip(grads, self.Q.trainable_variables))
 
-    def set_Qs_equal(self):
+    def set_Qs_equal(self): 
         self.Q_t.set_weights(self.Q.get_weights()) 
 
     def best_action(self, state, class_num):
@@ -100,14 +98,6 @@ if __name__ == "__main__":
         delta_state = np.array([delta_comp, delta_radio, delta_storage])
         return delta_state
     
-    def train(batch):
-        state = tf.convert_to_tensor(np.concatenate(batch[:, 0]))
-        action = tf.reshape(tf.convert_to_tensor(batch[:, 1], dtype = tf.uint8), (batch_size, 1))
-        reward = tf.reshape(tf.convert_to_tensor(batch[:, 2], dtype = tf.float32), (batch_size, 1))
-        class_num = tf.reshape(tf.convert_to_tensor(batch[:, 3], dtype = tf.uint8), (batch_size, ))
-        s_prime = tf.convert_to_tensor(np.concatenate(batch[:, 4]))
-        Q.update_table(state, action, reward, class_num, s_prime)
-
     #### init Q learning  Hyperparams ####
     gamma = .99 # doscount factor, range (0, 1), higher value -> future is valued higher 
     epsilon = .3 # greedy search factor, range(0, 1), higher value -> more random choices are made
@@ -128,14 +118,23 @@ if __name__ == "__main__":
     droptimes = [] # queue to store droptimes in so the active resources can be removed from 
 
     reward_avg = .8
-    class_rewards = ([], [], [])
 
     #### replay buffer values ####
     buffer = Buffer(max_size = 10000) # make buffer with max size 10000
 
-    C = 1000
+    C = 1000 # update q table every 1000 iterations 
     C_counter = 0
     batch_size = 64
+    
+    # define training function for buffer
+    def train(batch):
+        state = tf.convert_to_tensor(np.concatenate(batch[:, 0]))
+        action = tf.reshape(tf.convert_to_tensor(batch[:, 1], dtype = tf.uint8), (batch_size, 1))
+        reward = tf.reshape(tf.convert_to_tensor(batch[:, 2], dtype = tf.float32), (batch_size, 1))
+        class_num = tf.reshape(tf.convert_to_tensor(batch[:, 3], dtype = tf.uint8), (batch_size, ))
+        s_prime = tf.convert_to_tensor(np.concatenate(batch[:, 4]))
+        Q.update_table(state, action, reward, class_num, s_prime)
+
 
     for t in range(timesteps):
         reward = 0
@@ -161,10 +160,10 @@ if __name__ == "__main__":
                     net_reward = rewards[class_num] - costs[class_num] 
                 buffer.append([state, action, net_reward, class_num, s_prime])
                 state = s_prime # set new stat
-                reward_avg = reward_avg * .999 + .001 * reward
+                reward_avg = reward_avg * .999 + .001 * net_reward
 
                 C_counter += 1
-                if C_counter % C == 0: # 
+                if C_counter % C == 0: 
                     Q.set_Qs_equal()
                     C_counter == 0
                 

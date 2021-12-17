@@ -106,7 +106,7 @@ if __name__ == "__main__":
                     net_reward = rewards[class_num] - costs[class_num] 
                 Q.update_table(state, action, net_reward, class_num, s_prime, alpha, gamma)
                 state = s_prime # set new stat
-                reward_avg = reward_avg * .999 + .001 * reward
+                reward_avg = reward_avg * .999 + .001 * net_reward
 
         i = 0 
         while i < len(active_resources):
